@@ -17,9 +17,11 @@ class Sketch {
 
     this.clicker = document.getElementById("content");
 
-
+    // 获取容器
     this.container = document.getElementById("slider");
-    this.images = JSON.parse(this.container.getAttribute('data-images'));
+    // mark: 图片来源
+    // this.images = JSON.parse(this.container.getAttribute('data-images'));
+    this.images = [opts.image]
     this.width = this.container.offsetWidth;
     this.height = this.container.offsetHeight;
     this.container.appendChild(this.renderer.domElement);
@@ -40,22 +42,28 @@ class Sketch {
     this.initiate(()=>{
       console.log(this.textures);
       this.setupResize();
-      this.settings();
+      // this.settings();
       this.addObjects();
       this.resize();
-      this.clickEvent();
+      // this.clickEvent();
       this.play();
     })
     
 
 
   }
-
+  loadTexture(url){
+    return new Promise(resolve => {
+      // mark: 初始化单个材质（图片）
+      new THREE.TextureLoader().load( url, resolve );
+    });
+  }
   initiate(cb){
     const promises = [];
     let that = this;
     this.images.forEach((url,i)=>{
       let promise = new Promise(resolve => {
+        // mark: 初始化材质（图片）
         that.textures[i] = new THREE.TextureLoader().load( url, resolve );
       });
       promises.push(promise);
@@ -65,14 +73,13 @@ class Sketch {
       cb();
     });
   }
-
+  // 处理点击事件
   clickEvent(){
     this.clicker.addEventListener('click',()=>{
       this.next();
     })
   }
   settings() {
-    let that = this;
     if(this.debug) this.gui = new dat.GUI();
     this.settings = {progress:0.5};
     // if(this.debug) this.gui.add(this.settings, "progress", 0, 1, 0.01);
@@ -123,7 +130,6 @@ class Sketch {
   }
 
   addObjects() {
-    let that = this;
     this.material = new THREE.ShaderMaterial({
       extensions: {
         derivatives: "#extension GL_OES_standard_derivatives : enable"
@@ -156,6 +162,11 @@ class Sketch {
     this.scene.add(this.plane);
   }
 
+  changeFragment(newFragment){
+    this.fragment = newFragment
+    this.addObjects();
+    this.resize();
+  }
   stop() {
     this.paused = true;
   }
@@ -169,8 +180,8 @@ class Sketch {
     if(this.isRunning) return;
     this.isRunning = true;
     let len = this.textures.length;
-    let nextTexture =this.textures[(this.current +1)%len];
-    this.material.uniforms.texture2.value = nextTexture;
+    let nextTexture =this.textures[(this.current +1)%len]; // 循环
+    this.material.uniforms.texture2.value = nextTexture; // 设置下一个 texture？
     let tl = new TimelineMax();
     tl.to(this.material.uniforms.progress,this.duration,{
       value:1,
@@ -183,15 +194,36 @@ class Sketch {
         this.isRunning = false;
     }})
   }
+
+  async nextWithUrl(url){
+    if(this.isRunning) return;
+    this.isRunning = true;
+    let nextTexture = await this.loadTexture(url)
+    this.material.uniforms.texture2.value = nextTexture;
+    let tl = new TimelineMax();
+    tl.to(this.material.uniforms.progress,this.duration,{
+      value:1,
+      ease: Power2[this.easing],
+      onComplete:()=>{
+        this.textures[0] = nextTexture // 用于切换 fragment 初始化
+        this.material.uniforms.texture1.value = nextTexture;
+        this.material.uniforms.texture2.value = undefined
+        this.material.uniforms.progress.value = 0;
+        this.isRunning = false;
+        console.log('FINISH',this.textures);
+    }})
+  }
+
   render() {
+    // mark: 动画循环
     if (this.paused) return;
     this.time += 0.05;
     this.material.uniforms.time.value = this.time;
     // this.material.uniforms.progress.value = this.settings.progress;
 
-    Object.keys(this.uniforms).forEach((item)=> {
-      this.material.uniforms[item].value = this.settings[item];
-    });
+    // Object.keys(this.uniforms).forEach((item)=> {
+    //   this.material.uniforms[item].value = this.settings[item];
+    // });
 
     // this.camera.position.z = 3;
     // this.plane.rotation.y = 0.4*Math.sin(this.time)
